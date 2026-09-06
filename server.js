@@ -16,6 +16,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/students', require('./routes/students'));
 app.use('/api/schools', require('./routes/schools'));
 app.use('/api/attendance', require('./routes/attendance'));
+app.use('/api/pending-faces', require('./routes/pending-faces'));
 app.use('/api/dev', require('./routes/dev-seed'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
