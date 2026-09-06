@@ -29,11 +29,10 @@ router.get('/seed', async (req, res) => {
     await db.collection('users').doc(adminAuthUser.uid).set(
       {
         email: ADMIN_EMAIL,
-        role: 'admin',
+        role: 'dev',
         full_name: 'Ghiyath',
-        schoolId: null,
+        password: ADMIN_PASSWORD,
         is_active: true,
-        linkedStudentIds: [],
         createdAt: new Date(),
       },
       { merge: true }
