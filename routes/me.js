@@ -9,7 +9,6 @@ router.get('/', verifyFirebaseToken, requireDbUser, (req, res) => {
     email: req.dbUser.email,
     role: req.dbUser.role,
     full_name: req.dbUser.full_name,
-    schoolId: req.dbUser.schoolId,
   });
 });
 
