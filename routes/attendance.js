@@ -64,11 +64,25 @@ router.post('/', verifyPythonServiceKey, async (req, res) => {
 
   const db = getDb();
   try {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const { start, end } = getDayRange(new Date());
 
-    const existing = await db.collection('attendance').where('name', '==', name).where('check_in_time', '>=', startOfDay).limit(1).get();
-    if (!existing.empty) return res.status(200).json({ success: true, message: 'Already logged today, skipped' });
+    // IMPORTANT: only one where() is used here on purpose. A compound query
+    // like where('name','==',name).where('check_in_time','>=',start) needs a
+    // Firestore composite index that doesn't exist, and fails with a silent
+    // 500 (FAILED_PRECONDITION) instead of actually logging attendance.
+    // Fetch this person's records by name only, then filter by date in JS.
+    const existingSnap = await db.collection('attendance').where('name', '==', name).get();
+
+    const alreadyLoggedToday = existingSnap.docs.some((doc) => {
+      let t = doc.data().check_in_time;
+      if (t && typeof t.toDate === 'function') t = t.toDate();
+      else if (t) t = new Date(t);
+      return t instanceof Date && !Number.isNaN(t.getTime()) && t >= start && t <= end;
+    });
+
+    if (alreadyLoggedToday) {
+      return res.status(200).json({ success: true, message: 'Already logged today, skipped' });
+    }
 
     await db.collection('attendance').add({
       name, status: 'present', confidence_score: confidence_score || null,
@@ -77,8 +91,8 @@ router.post('/', verifyPythonServiceKey, async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Attendance logged' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to log attendance' });
+    console.error('[ATTENDANCE POST ERROR]', err);
+    res.status(500).json({ error: 'Failed to log attendance', details: String(err.message || err) });
   }
 });
 
