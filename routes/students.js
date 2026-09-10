@@ -11,7 +11,7 @@ router.get('/', verifyFirebaseToken, requireDbUser, async (req, res) => {
   try {
     let students = [];
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'dev') {
       const snap = await db.collection('students').get();
       students = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     } else if (role === 'school_admin') {
@@ -34,7 +34,7 @@ router.get('/', verifyFirebaseToken, requireDbUser, async (req, res) => {
   }
 });
 
-router.post('/', verifyFirebaseToken, requireDbUser, requireRole('admin', 'school_admin'), async (req, res) => {
+router.post('/', verifyFirebaseToken, requireDbUser, requireRole('admin', 'dev', 'school_admin'), async (req, res) => {
   const db = getDb();
   const caller = req.dbUser;
   let { full_name, schoolId, profId, familyIds } = req.body;
@@ -62,7 +62,7 @@ router.post('/', verifyFirebaseToken, requireDbUser, requireRole('admin', 'schoo
   }
 });
 
-router.patch('/:id', verifyFirebaseToken, requireDbUser, requireRole('admin', 'school_admin'), async (req, res) => {
+router.patch('/:id', verifyFirebaseToken, requireDbUser, requireRole('admin', 'dev', 'school_admin'), async (req, res) => {
   const db = getDb();
   const caller = req.dbUser;
   const ref = db.collection('students').doc(req.params.id);
