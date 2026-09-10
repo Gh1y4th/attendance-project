@@ -60,4 +60,119 @@ router.post('/', verifyPythonServiceKey, async (req, res) => {
   }
 });
 
+// =========================================================
+// POST /api/attendance/manual
+//
+// Lets a dev or school_admin set a student's status for today
+// straight from the dashboard, even if the camera never logged
+// that student today (e.g. marking someone "absent" or "excused"
+// by hand). Creates today's record if none exists yet, otherwise
+// updates the existing one - same duplicate-check approach as the
+// camera's POST route above (single where(), date filtering in JS).
+// =========================================================
+router.post('/manual', verifyFirebaseToken, requireDbUser, async (req, res) => {
+  if (!['dev', 'school_admin'].includes(req.dbUser.role)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Only dev or school admin can edit attendance records',
+    });
+  }
+
+  const { student_id, status } = req.body || {};
+  const validStatuses = ['present', 'late', 'absent', 'excused'];
+
+  if (!student_id) {
+    return res.status(400).json({ success: false, error: 'student_id is required' });
+  }
+
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, error: 'Invalid status value' });
+  }
+
+  const db = getDb();
+
+  try {
+    const studentRef = db.collection('students').doc(student_id);
+    const studentSnap = await studentRef.get();
+
+    if (!studentSnap.exists) {
+      return res.status(404).json({ success: false, error: 'Student not found' });
+    }
+
+    const student = studentSnap.data();
+    const studentFullName = String(student.full_name || '').trim();
+
+    const { start, end } = getDayRange(new Date());
+
+    const studentAttendanceSnap = await db
+      .collection('attendance')
+      .where('student_id', '==', student_id)
+      .get();
+
+    let existingDoc = null;
+
+    for (const doc of studentAttendanceSnap.docs) {
+      const data = doc.data();
+      let existingTime = data.check_in_time;
+
+      if (existingTime && typeof existingTime.toDate === 'function') {
+        existingTime = existingTime.toDate();
+      } else if (existingTime) {
+        existingTime = new Date(existingTime);
+      }
+
+      if (
+        existingTime instanceof Date &&
+        !Number.isNaN(existingTime.getTime()) &&
+        existingTime >= start &&
+        existingTime <= end
+      ) {
+        existingDoc = doc;
+        break;
+      }
+    }
+
+    if (existingDoc) {
+      await existingDoc.ref.update({
+        status,
+        edited_by: req.dbUser.id,
+        edited_at: new Date(),
+      });
+
+      return res.json({
+        success: true,
+        message: 'Attendance updated',
+        attendance_id: existingDoc.id,
+      });
+    }
+
+    const attendanceRef = await db.collection('attendance').add({
+      student_id,
+      name: studentFullName,
+      student_name: studentFullName,
+      status,
+      confidence_score: null,
+      check_in_time: new Date(),
+      edited_by: req.dbUser.id,
+      edited_at: new Date(),
+      created_at: new Date(),
+      manual: true,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Attendance created',
+      attendance_id: attendanceRef.id,
+    });
+  } catch (err) {
+    console.error('[ATTENDANCE MANUAL ERROR]', err);
+
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to set attendance',
+      details: process.env.NODE_ENV === 'production' ? undefined : String(err.message || err),
+    });
+  }
+});
+
 module.exports = router;
