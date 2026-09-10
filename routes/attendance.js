@@ -32,13 +32,25 @@ router.patch('/:id', verifyFirebaseToken, requireDbUser, async (req, res) => {
   if (!['dev', 'school_admin'].includes(req.dbUser.role)) {
     return res.status(403).json({ error: 'Only dev or school admin can edit attendance records' });
   }
-  const { status } = req.body;
+  const { status, check_in_time } = req.body;
   const validStatuses = ['present', 'absent'];
   if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status value' });
 
+  const updates = { status, edited_by: req.dbUser.id, edited_at: new Date() };
+
+  // optional manual time correction - only touches check_in_time if the
+  // caller actually sent one, and only if it parses to a real date
+  if (check_in_time !== undefined) {
+    const parsedTime = new Date(check_in_time);
+    if (Number.isNaN(parsedTime.getTime())) {
+      return res.status(400).json({ error: 'Invalid check_in_time' });
+    }
+    updates.check_in_time = parsedTime;
+  }
+
   const db = getDb();
   try {
-    await db.collection('attendance').doc(req.params.id).update({ status, edited_by: req.dbUser.id, edited_at: new Date() });
+    await db.collection('attendance').doc(req.params.id).update(updates);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -88,7 +100,7 @@ router.post('/manual', verifyFirebaseToken, requireDbUser, async (req, res) => {
     });
   }
 
-  const { student_id, status } = req.body || {};
+  const { student_id, status, check_in_time } = req.body || {};
   const validStatuses = ['present', 'absent'];
 
   if (!student_id) {
@@ -97,6 +109,15 @@ router.post('/manual', verifyFirebaseToken, requireDbUser, async (req, res) => {
 
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ success: false, error: 'Invalid status value' });
+  }
+
+  let manualCheckInTime = new Date();
+  if (check_in_time !== undefined) {
+    const parsedTime = new Date(check_in_time);
+    if (Number.isNaN(parsedTime.getTime())) {
+      return res.status(400).json({ success: false, error: 'Invalid check_in_time' });
+    }
+    manualCheckInTime = parsedTime;
   }
 
   const db = getDb();
@@ -145,6 +166,7 @@ router.post('/manual', verifyFirebaseToken, requireDbUser, async (req, res) => {
     if (existingDoc) {
       await existingDoc.ref.update({
         status,
+        check_in_time: manualCheckInTime,
         edited_by: req.dbUser.id,
         edited_at: new Date(),
       });
@@ -162,7 +184,7 @@ router.post('/manual', verifyFirebaseToken, requireDbUser, async (req, res) => {
       student_name: studentFullName,
       status,
       confidence_score: null,
-      check_in_time: new Date(),
+      check_in_time: manualCheckInTime,
       edited_by: req.dbUser.id,
       edited_at: new Date(),
       created_at: new Date(),
