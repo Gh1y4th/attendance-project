@@ -9,7 +9,7 @@ router.get('/', verifyFirebaseToken, requireDbUser, async (req, res) => {
     const snap = await db.collection('attendance').orderBy('check_in_time', 'desc').get();
     const rows = snap.docs.map((d) => {
       const data = d.data();
-      return { ATTENDANCE_ID: d.id, NAME: data.name, CHECK_IN_TIME: data.check_in_time, STATUS: data.status, CONFIDENCE_SCORE: data.confidence_score || null };
+      return { ATTENDANCE_ID: d.id, STUDENT_ID: data.student_id || null, NAME: data.name, CHECK_IN_TIME: data.check_in_time, STATUS: data.status, CONFIDENCE_SCORE: data.confidence_score || null };
     });
     res.json(rows);
   } catch (err) {
@@ -23,7 +23,7 @@ router.patch('/:id', verifyFirebaseToken, requireDbUser, async (req, res) => {
     return res.status(403).json({ error: 'Only dev or school admin can edit attendance records' });
   }
   const { status } = req.body;
-  const validStatuses = ['present', 'late', 'absent', 'excused'];
+  const validStatuses = ['present', 'absent'];
   if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status value' });
 
   const db = getDb();
@@ -79,7 +79,7 @@ router.post('/manual', verifyFirebaseToken, requireDbUser, async (req, res) => {
   }
 
   const { student_id, status } = req.body || {};
-  const validStatuses = ['present', 'late', 'absent', 'excused'];
+  const validStatuses = ['present', 'absent'];
 
   if (!student_id) {
     return res.status(400).json({ success: false, error: 'student_id is required' });
